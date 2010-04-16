@@ -1,16 +1,20 @@
 #!/bin/bash
 
-REDISVERSION=redis-1.2.6
-SERVERSUFFIX=redis-server-1.2.6
 MONIT_DAEMON_SEC=1
 REDIS_SAVE_SEC=10
 USE_HOST=$1
 APPENDONLY=no
 
+# source twine config
+. twine-config.sh
+
+
 if [ $# -lt 1 ] ; then
-  echo twine-setup all partitions for all hosts
+  #echo "twine-setup all partitions for all hosts"
+  echo "twine-setup <hostname>"
+  exit 1
 else
-  echo twine-setup only partitions for host: $1
+  echo "twine-setup only partitions for host: $1"
 fi
 
 # check that the twine.conf file exists and is readable
@@ -41,17 +45,18 @@ cat twine.conf | while read -r LINE; do
 done
 
 # check that partitions directory does not exist
-if [ -e partitions ]; then
+if [ -e "${PARTDIR}" ]; then
   echo =============================
-  echo Error: partitions directory already exists
+  echo Error: partitions directory already exists: ${PARTDIR}
+  ls -AlG ${PARTDIR}
   echo =============================
   exit 1
 fi
 
 echo =============================
-echo Creating partitions directory
+echo Creating partitions directory ${PARTDIR}
 echo =============================
-mkdir partitions
+mkdir -p ${PARTDIR}
 
 
 cat twine.conf | while read -r LINE; do
@@ -79,8 +84,8 @@ cat twine.conf | while read -r LINE; do
       continue
     fi
 
-    PART_PATH=partitions/$HOST/$NAME
-    echo Creating $HOST/${NAME}-${SERVERSUFFIX}
+    PART_PATH="${PARTDIR}/$HOST/$NAME"
+    echo Creating "$HOST/${NAME}-${SERVERSUFFIX}"
     if [ -e $PART_PATH ]; then
       echo =============================
       echo Error: $PART_PATH already exists
@@ -138,24 +143,24 @@ cat twine.conf | while read -r LINE; do
     # create appendonly bg rewrite script
     if [ "_$APPENDONLY" = "_yes" ]; then
       # create appendonly save
-      AOFRC=partitions/$HOST/appendonly/appendonly.sh
+      AOFRC="${PARTDIR}/$HOST/appendonly/appendonly.sh"
       if ! [ -r $AOFRC ]; then
-        mkdir -p partitions/$HOST/appendonly
+        mkdir -p ${PARTDIR}/$HOST/appendonly
         echo \#!`which dash` > $AOFRC
-        echo echo \$\$ \> ${PWD}/partitions/$HOST/appendonly/appendonly.pid >> $AOFRC
+        echo echo \$\$ \> ${PWD}/${PARTDIR}/$HOST/appendonly/appendonly.pid >> $AOFRC
       fi
       echo sleep $REDIS_SAVE_SEC                                        >> $AOFRC
       echo ${PWD}/${REDISVERSION}/redis-cli -p $PORT Bgrewriteaof      >> $AOFRC
     fi
 
     # create monitrc
-    MONITRC=partitions/$HOST/monit/monitrc
+    MONITRC=${PARTDIR}/$HOST/monit/monitrc
     if ! [ -r $MONITRC ]; then
-      mkdir -p partitions/$HOST/monit
+      mkdir -p ${PARTDIR}/$HOST/monit
       echo set daemon $MONIT_DAEMON_SEC                                 > $MONITRC
       echo set httpd port 4280                                         >> $MONITRC
       echo allow localhost                                             >> $MONITRC
-      echo set logfile ${PWD}/partitions/${HOST}/monit/logfile         >> $MONITRC
+      echo set logfile ${PWD}/${PARTDIR}/${HOST}/monit/logfile         >> $MONITRC
      #echo set mailserver localhost                                    >> $MONITRC
      #echo set alert foo@bar.baz                                       >> $MONITRC
       echo >> $MONITRC
